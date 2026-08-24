@@ -1,0 +1,54 @@
+/**
+ * LocalStorage & Data Repository Pattern Implementation
+ */
+const StorageRepository = {
+    KEY: 'FC26_CAREER_UNIVERSE_DATA',
+
+    getDefaultData() {
+        return {
+            club: {
+                name: "FC Schalke 04",
+                manager: "ユーザー監督",
+                season: "2026-2027",
+                rank: 1
+            },
+            squad: [
+                { id: "p1", name: "Lukovic", pos: "ST", ovr: 78, role: "主力", startsInLast10: 2, satisfaction: 35, trustManager: 40, transferDesire: true, agentAlert: true },
+                { id: "p2", name: "Boutrah", pos: "LW", ovr: 76, role: "主力", startsInLast10: 9, satisfaction: 88, trustManager: 90, transferDesire: false, agentAlert: false },
+                { id: "p3", name: "Muller", pos: "CB", ovr: 81, role: "重要選手", startsInLast10: 8, satisfaction: 75, trustManager: 80, transferDesire: false, agentAlert: false }
+            ],
+            matches: [],
+            timeline: [
+                { date: "2026/08/15", title: "シーズン開幕", desc: "FC26 Universe Managerが起動しました。", type: "info" }
+            ],
+            simulationState: {
+                sdBriefing: "現在、Lukovicの出場機会に関する不満が表面化しつつあります。代理人からの公式アプローチを警戒してください。",
+                boardTrust: "満足",
+                fanMood: "期待と懸念が交錯中"
+            }
+        };
+    },
+
+    load() {
+        const raw = localStorage.getItem(this.KEY);
+        if (!raw) {
+            const defaultData = this.getDefaultData();
+            this.save(defaultData);
+            return defaultData;
+        }
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            console.error("Failed to parse storage, resetting", e);
+            return this.getDefaultData();
+        }
+    },
+
+    save(data) {
+        localStorage.setItem(this.KEY, JSON.stringify(data));
+    },
+
+    clear() {
+        localStorage.removeItem(this.KEY);
+    }
+};
