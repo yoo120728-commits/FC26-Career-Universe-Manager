@@ -1,0 +1,95 @@
+/**
+ * Rule-Based Simulation Engine
+ * - ゲーム内絶対的事実（試合結果・出場時間）に基づき、選手の心理・メディア・フロント・サポーターの反応を段階的かつ決定論的に生成する。
+ * - AIが勝手に試合結果、怪我、引退、勝手な移籍を発生させることを厳格に遮断する。
+ */
+class SimulationEngine {
+    constructor(data) {
+        this.data = data;
+    }
+
+    /**
+     * ユーザーが試合を追加した後に呼ばれるコア計算処理
+     */
+    processMatchEvent(matchData) {
+        const squad = this.data.squad;
+
+        // 1. 各選手の出場・不満ロジックの段階的更新
+        squad.forEach(player => {
+            const isStarter = matchData.starters && matchData.starters.includes(player.name);
+            
+            // 直近出場実績の更新シミュレーション
+            if (isStarter) {
+                player.startsInLast10 = Math.min(10, player.startsInLast10 + 1);
+                player.satisfaction = Math.min(100, player.satisfaction + 8);
+            } else {
+                player.startsInLast10 = Math.max(0, player.startsInLast10 - 1);
+                
+                // 役割に応じた不満蓄積計算
+                if (player.role === "主力" || player.role === "重要選手") {
+                    if (player.startsInLast10 <= 3) {
+                        player.satisfaction = Math.max(0, player.satisfaction - 15);
+                    }
+                }
+            }
+
+            // 段階的不満の進行閾値
+            if (player.satisfaction < 40) {
+                player.agentAlert = true;
+            }
+            if (player.satisfaction < 25) {
+                player.transferDesire = true;
+            } else if (player.satisfaction > 60) {
+                player.transferDesire = false;
+                player.agentAlert = false;
+            }
+        });
+
+        // 2. タイムラインへの記録
+        this.data.timeline.unshift({
+            date: matchData.date,
+            title: `試合終了: vs ${matchData.opponent} (${matchData.scoreGF}-${matchData.scoreGA})`,
+            desc: `フォーメーション ${matchData.formation} で戦い、${matchData.scoreGF > matchData.scoreGA ? '勝利' : matchData.scoreGF === matchData.scoreGA ? '引き分け' : '敗戦'}。`,
+            type: "match"
+        });
+
+        // 3. SD内部レポートの動的再生成
+        this.updateSDBriefing();
+    }
+
+    updateSDBriefing() {
+        const angryPlayers = this.data.squad.filter(p => p.satisfaction < 40);
+        if (angryPlayers.length > 0) {
+            const names = angryPlayers.map(p => p.name).join(', ');
+            this.data.simulationState.sdBriefing = `【SD内部報告】現在、${names} が出場機会の不足について不満を強めています。代理人からの正式な申し入れやメディアへの情報リークリスクが高まっています。起用方針の再検討か直接の面談をお勧めします。`;
+        } else {
+            this.data.simulationState.sdBriefing = `【SD内部報告】チーム内の雰囲気は比較的落ち着いています。主力選手の出場ペースも適正に管理されています。`;
+        }
+    }
+
+    generateNewsFeed() {
+        const news = [];
+        const angry = this.data.squad.find(p => p.satisfaction < 35);
+        if (angry) {
+            news.push({
+                outlet: "Bastia Tribune",
+                headline: `【独占】${angry.name}、出場機会減少に不満か？今冬の移籍を選択肢に`,
+                category: "移籍噂"
+            });
+        }
+        news.push({
+            outlet: "Club Media",
+            headline: `次節に向けた戦術トレーニングを公開。監督の采配に注目が集まる`,
+            category: "クラブニュース"
+        });
+        return news;
+    }
+
+    generateFanVibe() {
+        const avgSat = this.data.squad.reduce((acc, p) => acc + p.satisfaction, 0) / (this.data.squad.length || 1);
+        if (avgSat < 50) {
+            return ["@SchalkeFan99: 主力の不満問題、早く解決してくれ...", "@UltraKicker: 監督のターンオーバー基準がよく分からない。"];
+        }
+        return ["@SchalkeFan99: チームのまとまりを感じる！このまま連勝だ！", "@SoccerAnalyst: 戦術の落とし込みがスムーズ。"];
+    }
+}
