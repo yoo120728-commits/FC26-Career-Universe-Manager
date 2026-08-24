@@ -1,0 +1,335 @@
+/**
+ * App Controller & UI Renderer
+ */
+class App {
+    constructor() {
+        this.data = StorageRepository.load();
+        this.engine = new SimulationEngine(this.data);
+        this.activeTalkPlayer = null;
+        this.init();
+    }
+
+    init() {
+        this.renderAll();
+    }
+
+    switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
+        
+        const targetView = document.getElementById(`view-${tabId}`);
+        const targetTab = document.getElementById(`tab-${tabId}`);
+        if (targetView) targetView.classList.remove('hidden');
+        if (targetTab) targetTab.classList.add('active-tab');
+        
+        this.renderAll();
+    }
+
+    renderAll() {
+        this.renderHeaderAndStats();
+        this.renderDashboard();
+        this.renderUniverse();
+        this.renderSDDesk();
+        this.renderSquad();
+        this.renderTimeline();
+        if (window.lucide) lucide.createIcons();
+    }
+
+    renderHeaderAndStats() {
+        document.getElementById('header-club-info').textContent = `${this.data.club.name} | ${this.data.club.manager}`;
+        document.getElementById('stat-rank').textContent = `${this.data.club.rank}位`;
+        
+        const alertCount = this.data.squad.filter(p => p.satisfaction < 40).length;
+        document.getElementById('stat-alerts').textContent = `${alertCount}件`;
+        document.getElementById('stat-squad').textContent = `${this.data.squad.length}名`;
+
+        // Record calculation
+        let w = 0, d = 0, l = 0;
+        this.data.matches.forEach(m => {
+            if (m.scoreGF > m.scoreGA) w++;
+            else if (m.scoreGF === m.scoreGA) d++;
+            else l++;
+        });
+        document.getElementById('stat-record').textContent = `${w}勝 ${d}分 ${l}敗`;
+    }
+
+    renderDashboard() {
+        document.getElementById('dashboard-sd-briefing').textContent = this.data.simulationState.sdBriefing;
+        
+        // Discontent List
+        const discontentEl = document.getElementById('dashboard-discontent-list');
+        discontentEl.innerHTML = '';
+        const angryList = this.data.squad.filter(p => p.satisfaction < 60);
+
+        if (angryList.length === 0) {
+            discontentEl.innerHTML = '<p class="text-xs text-slate-500">現在、深刻な不満を抱える選手はいません。</p>';
+        } else {
+            angryList.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800';
+                item.innerHTML = `
+                    <div>
+                        <div class="font-bold text-sm text-slate-200">${p.name} <span class="text-xs text-slate-500">(${p.pos})</span></div>
+                        <div class="text-xs text-amber-400">満足度: ${p.satisfaction}% | 直近先発: ${p.startsInLast10}/10</div>
+                    </div>
+                    <button onclick="app.openTalkModal('${p.id}')" class="px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold transition">
+                        面談を実施
+                    </button>
+                `;
+                discontentEl.appendChild(item);
+            });
+        }
+
+        // News & Fan Vibe
+        const newsFeed = document.getElementById('dashboard-news-feed');
+        newsFeed.innerHTML = '';
+        this.engine.generateNewsFeed().forEach(n => {
+            newsFeed.innerHTML += `
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
+                    <span class="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">${n.outlet}</span>
+                    <h4 class="font-bold text-xs mt-1 text-slate-200">${n.headline}</h4>
+                </div>
+            `;
+        });
+
+        const fanVibe = document.getElementById('dashboard-fan-vibe');
+        fanVibe.innerHTML = '';
+        this.engine.generateFanVibe().forEach(v => {
+            fanVibe.innerHTML += `<div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/60 text-xs italic text-slate-400">${v}</div>`;
+        });
+    }
+
+    renderUniverse() {
+        const red = document.getElementById('universe-red-list');
+        const yellow = document.getElementById('universe-yellow-list');
+        const green = document.getElementById('universe-green-list');
+
+        red.innerHTML = ''; yellow.innerHTML = ''; green.innerHTML = '';
+
+        this.data.squad.forEach(p => {
+            const card = `
+                <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 text-xs space-y-1">
+                    <div class="font-bold text-slate-200 flex justify-between">
+                        <span>${p.name} (${p.pos})</span>
+                        <span>OVR ${p.ovr}</span>
+                    </div>
+                    <div class="text-slate-400">役割: ${p.role}</div>
+                    <div class="text-slate-400">直近先発: ${p.startsInLast10}/10</div>
+                </div>
+            `;
+            if (p.satisfaction < 40) red.innerHTML += card;
+            else if (p.satisfaction < 70) yellow.innerHTML += card;
+            else green.innerHTML += card;
+        });
+    }
+
+    renderSDDesk() {
+        const talkReqs = document.getElementById('sddesk-talk-requests');
+        const agentReqs = document.getElementById('sddesk-agent-requests');
+        talkReqs.innerHTML = ''; agentReqs.innerHTML = '';
+
+        this.data.squad.filter(p => p.satisfaction < 50).forEach(p => {
+            talkReqs.innerHTML += `
+                <div class="bg-slate-900 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
+                    <div>
+                        <div class="font-bold text-xs">${p.name} からの面談申し入れ</div>
+                        <div class="text-[10px] text-slate-400">「監督、今後の起用方針について話があります。」</div>
+                    </div>
+                    <button onclick="app.openTalkModal('${p.id}')" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs">承認</button>
+                </div>
+            `;
+        });
+
+        this.data.squad.filter(p => p.agentAlert).forEach(p => {
+            agentReqs.innerHTML += `
+                <div class="bg-slate-900 p-3 rounded-xl border border-amber-500/20 text-xs space-y-1">
+                    <div class="font-bold text-amber-400">代理人からの公式打診 (${p.name})</div>
+                    <div class="text-slate-300">「今後1か月で状況が改善しなければ、移籍リクエストの提出を検討せざるを得ません。」</div>
+                </div>
+            `;
+        });
+    }
+
+    renderSquad() {
+        const body = document.getElementById('squad-table-body');
+        body.innerHTML = '';
+
+        this.data.squad.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-900/50 transition';
+            tr.innerHTML = `
+                <td class="p-3 font-bold text-slate-100">${p.name}</td>
+                <td class="p-3"><span class="px-2 py-0.5 bg-slate-800 rounded text-xs">${p.pos}</span></td>
+                <td class="p-3 font-semibold">${p.ovr}</td>
+                <td class="p-3 text-xs text-slate-400">${p.role}</td>
+                <td class="p-3 text-xs">${p.startsInLast10} / 10</td>
+                <td class="p-3 text-xs font-bold ${p.satisfaction < 40 ? 'text-red-400' : 'text-emerald-400'}">${p.satisfaction}%</td>
+                <td class="p-3">
+                    <button onclick="app.openTalkModal('${p.id}')" class="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded">面談</button>
+                </td>
+            `;
+            body.appendChild(tr);
+        });
+    }
+
+    renderTimeline() {
+        const container = document.getElementById('timeline-list');
+        container.innerHTML = '';
+
+        this.data.timeline.forEach(item => {
+            container.innerHTML += `
+                <div class="relative">
+                    <div class="absolute -left-[31px] top-1.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-950"></div>
+                    <div class="text-xs text-slate-500">${item.date}</div>
+                    <div class="font-bold text-sm text-slate-200 mt-0.5">${item.title}</div>
+                    <div class="text-xs text-slate-400 mt-1">${item.desc}</div>
+                </div>
+            `;
+        });
+    }
+
+    saveMatchRecord(event) {
+        event.preventDefault();
+        const startersRaw = document.getElementById('match-starters').value;
+        const starters = startersRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+        const matchData = {
+            date: document.getElementById('match-date').value || new Date().toISOString().split('T')[0],
+            competition: document.getElementById('match-comp').value,
+            opponent: document.getElementById('match-opponent').value,
+            ha: document.getElementById('match-ha').value,
+            scoreGF: parseInt(document.getElementById('match-score-gf').value) || 0,
+            scoreGA: parseInt(document.getElementById('match-score-ga').value) || 0,
+            possession: parseInt(document.getElementById('match-possession').value) || 50,
+            formation: document.getElementById('match-formation').value || '4-3-3',
+            starters: starters,
+            notes: document.getElementById('match-notes').value
+        };
+
+        this.data.matches.push(matchData);
+        this.engine.processMatchEvent(matchData);
+        StorageRepository.save(this.data);
+        
+        alert("試合結果（絶対的事実）を保存し、不満シミュレーションを更新しました。");
+        document.getElementById('match-form').reset();
+        this.switchTab('dashboard');
+    }
+
+    handleOCRUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Mock OCR Process
+        alert("OCR解析中... スケーラブルなAI/OCRインターフェースをシミュレートしています。");
+        setTimeout(() => {
+            document.getElementById('match-opponent').value = "Dortmund (OCR解析結果)";
+            document.getElementById('match-score-gf').value = "2";
+            document.getElementById('match-score-ga').value = "1";
+            document.getElementById('match-comp').value = "Bundesliga 節15";
+            alert("OCR結果をフォームに仮反映しました。誤りがないか確認し『確定』保存を押してください。");
+        }, 1000);
+    }
+
+    openTalkModal(playerId) {
+        const player = this.data.squad.find(p => p.id === playerId);
+        if (!player) return;
+        this.activeTalkPlayer = player;
+
+        document.getElementById('talk-modal-title').textContent = `${player.name} との1対1面談`;
+        const history = document.getElementById('talk-chat-history');
+        history.innerHTML = `
+            <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+                <span class="font-bold text-emerald-400 text-xs">${player.name}:</span>
+                <p class="text-slate-200 mt-1">「監督、お時間ありがとうございます。直近の出場機会について直接お聞きしたかったんです...」</p>
+            </div>
+        `;
+
+        document.getElementById('modal-talk').classList.remove('hidden');
+    }
+
+    sendTalkMessage() {
+        const input = document.getElementById('talk-user-input');
+        const text = input.value.trim();
+        if (!text || !this.activeTalkPlayer) return;
+
+        const history = document.getElementById('talk-chat-history');
+        history.innerHTML += `
+            <div class="bg-emerald-950/40 p-3 rounded-lg border border-emerald-800/40 text-right">
+                <span class="font-bold text-emerald-400 text-xs">監督 (あなた):</span>
+                <p class="text-slate-200 mt-1">${text}</p>
+            </div>
+        `;
+
+        // Interactive AI Response simulation based on input
+        setTimeout(() => {
+            let reply = "「言葉だけでなく、次の試合での実際の起用を楽しみにしています。」";
+            if (text.includes("先発") || text.includes("使う")) {
+                this.activeTalkPlayer.satisfaction = Math.min(100, this.activeTalkPlayer.satisfaction + 15);
+                reply = "「そう言っていただけて安心しました。次の試合、全力を尽くします！」";
+            } else {
+                this.activeTalkPlayer.satisfaction = Math.max(0, this.activeTalkPlayer.satisfaction - 5);
+            }
+
+            history.innerHTML += `
+                <div class="bg-slate-900 p-3 rounded-lg border border-slate-800">
+                    <span class="font-bold text-emerald-400 text-xs">${this.activeTalkPlayer.name}:</span>
+                    <p class="text-slate-200 mt-1">${reply}</p>
+                </div>
+            `;
+            StorageRepository.save(this.data);
+            this.renderAll();
+            history.scrollTop = history.scrollHeight;
+        }, 600);
+
+        input.value = '';
+    }
+
+    triggerSDSimulation() {
+        this.engine.updateSDBriefing();
+        StorageRepository.save(this.data);
+        this.renderAll();
+        alert("SD内部レポートとシミュレーションを更新しました。");
+    }
+
+    openSettingsModal() { document.getElementById('modal-settings').classList.remove('hidden'); }
+    closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    exportJSON() {
+        const str = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.data, null, 2));
+        const a = document.createElement('a');
+        a.setAttribute("href", str);
+        a.setAttribute("download", `FC26_Universe_Backup_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                this.data = JSON.parse(e.target.result);
+                StorageRepository.save(this.data);
+                this.engine = new SimulationEngine(this.data);
+                this.renderAll();
+                this.closeModal('modal-settings');
+                alert("データを正常に復元しました。");
+            } catch (err) {
+                alert("JSONファイルの読み込みに失敗しました。");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    resetAllData() {
+        if (confirm("全てのキャリアデータを初期化しますか？この操作は取り消せません。")) {
+            StorageRepository.clear();
+            location.reload();
+        }
+    }
+}
+
+// App Global Execution
+const app = new App();
