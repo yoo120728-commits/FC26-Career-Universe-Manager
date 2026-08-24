@@ -1,0 +1,31 @@
+/* Custom Styles for FC26 Universe Manager */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.tab-btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #94a3b8;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: #f8fafc;
+}
+
+.tab-btn.active-tab {
+    color: #10b981;
+    border-bottom-color: #10b981;
+}
+
+.active-mobile-tab {
+    color: #10b981;
+}
